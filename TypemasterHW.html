@@ -1,0 +1,531 @@
+    <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Champs TYPO</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js for graph analysis -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* Custom scrollbar for the reference text area */
+        .custom-scrollbar::-webkit-scrollbar { width: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen text-slate-800 font-sans p-4 sm:p-8">
+
+    <div class="max-w-5xl mx-auto space-y-6">
+        
+        <!-- Header Section with Timer & Selection -->
+        <header class="flex flex-col sm:flex-row justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+            <div class="mb-4 sm:mb-0">
+                <h1 class="text-3xl font-extrabold text-indigo-600">CHAMP TYPO</h1>
+                <p class="text-slate-500 text-sm">Challenge Your Typing Speed</p>
+            </div>
+            
+            <div class="flex items-center space-x-4">
+                <!-- Dropdown for selecting time limit -->
+                <div class="flex flex-col">
+                    <label for="timeSelect" class="text-xs font-bold text-slate-500 uppercase">Test Duration</label>
+                    <select id="timeSelect" class="border border-slate-300 rounded p-1 text-slate-700 focus:outline-none focus:border-indigo-500 bg-slate-50">
+                        <option value="30">30 Seconds</option>
+                        <option value="60">1 Minute</option>
+                        <option value="120">2 Minutes</option>
+                        <option value="180">3 Minutes</option>
+                        <option value="300">5 Minutes</option>
+                    </select>
+                </div>
+                <!-- Countdown Timer Display -->
+                <div class="bg-indigo-50 border border-indigo-100 px-4 py-2 rounded-lg text-center min-w-[100px]">
+                    <span class="text-xs font-bold text-indigo-400 block uppercase">Time Left</span>
+                    <span id="countdownTimer" class="text-2xl font-black text-indigo-600">00:30</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Typing Test Area -->
+        <div class="bg-white p-6 rounded-xl shadow-md space-y-4 border border-slate-100">
+            
+            <!-- Reference Text Display (Where text gets highlighted) -->
+            <div class="space-y-1">
+                <label class="font-semibold text-slate-700">Reference Text:</label>
+                <div id="sampleTextDisplay" class="text-lg font-mono bg-slate-50 border border-slate-200 p-4 rounded-lg text-slate-600 select-none custom-scrollbar overflow-y-auto h-40 leading-relaxed tracking-wide">
+                    <!-- Spans will be injected here via JavaScript for letter-by-letter highlighting -->
+                </div>
+            </div>
+
+            <!-- User Input Area -->
+            <div class="space-y-1">
+                <label for="typingInput" class="font-semibold text-slate-700">Your Input (Timer starts on first key press):</label>
+                <textarea id="typingInput" 
+                          class="w-full h-24 p-4 border-2 border-slate-300 rounded-lg font-mono text-lg resize-none focus:outline-none focus:border-indigo-500 transition-colors bg-white shadow-inner"
+                          placeholder="Start typing..."></textarea>
+            </div>
+
+            <!-- Controls -->
+            <div class="flex justify-between items-center">
+                <button id="resetBtn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-6 rounded shadow-sm transition">
+                    Restart Test
+                </button>
+                <button id="submitBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-6 rounded shadow transition hidden">
+                    Submit Early
+                </button>
+            </div>
+
+        </div>
+
+        <!-- Real-Time Statistics Area -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 text-center">
+                <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wide">Net WPM</h3>
+                <p id="wpmDisplay" class="text-4xl font-black text-indigo-600">0</p>
+            </div>
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 text-center">
+                <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wide">WPS</h3>
+                <p id="wpsDisplay" class="text-3xl font-bold text-teal-500 mt-1">0.00</p>
+            </div>
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 text-center">
+                <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wide">Correct Words</h3>
+                <p id="correctWordsDisplay" class="text-3xl font-bold text-green-500 mt-1">0</p>
+            </div>
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 text-center">
+                <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wide">Wrong Words</h3>
+                <p id="wrongWordsDisplay" class="text-3xl font-bold text-red-500 mt-1">0</p>
+            </div>
+        </div>
+
+        <!-- Graph Analysis Area -->
+        <div class="bg-white p-6 rounded-xl shadow-md border border-slate-100">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-bold text-slate-700">WPM Progress Analysis</h2>
+                <span id="statusMsg" class="text-xs font-medium px-2 py-1 rounded bg-amber-100 text-amber-700">Connecting to database...</span>
+            </div>
+            <div class="w-full h-64 relative">
+                <canvas id="progressChart"></canvas>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- FIREBASE AND JAVASCRIPT LOGIC SECTION -->
+    <script type="module">
+        // 1. IMPORT FIREBASE MODULES
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // ==========================================
+        // 2. FIREBASE INITIALIZATION & AUTHENTICATION
+        // ==========================================
+        let db, auth, userId, appId;
+        let localHistory = []; // Fallback for offline mode or session data
+        const statusBadge = document.getElementById('statusMsg');
+        
+        async function setupFirebase() {
+            try {
+                appId = typeof __app_id !== 'undefined' ? __app_id : 'typing-master-demo';
+                const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+                
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                // Authentication (Required for Firestore Rules)
+                const token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+                if (token) {
+                    await signInWithCustomToken(auth, token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+                
+                userId = auth.currentUser.uid;
+                
+                statusBadge.innerText = "Cloud Synced";
+                statusBadge.className = "text-xs font-medium px-2 py-1 rounded bg-green-100 text-green-700";
+                
+                await loadHistoryAndRenderChart();
+            } catch (error) {
+                console.error("Firebase Auth Error:", error);
+                statusBadge.innerText = "Offline Mode - Session Data Only";
+                statusBadge.className = "text-xs font-medium px-2 py-1 rounded bg-slate-100 text-slate-700";
+                loadHistoryAndRenderChart(); // Render initial empty/local chart
+            }
+        }
+
+        // ==========================================
+        // 3. TEXT GENERATION BANK
+        // ==========================================
+        const paragraphBank = [
+            "Technology has revolutionized the way we interact with the world, breaking down geographical barriers and enabling instantaneous communication. It empowers us to access vast amounts of information with just a few clicks.",
+            "Artificial intelligence is rapidly evolving, bringing unprecedented changes to various industries. From automating mundane tasks to providing deep insights through data analysis, AI acts as a catalyst for innovation.",
+            "Programming is essentially the art of breaking down complex problems into smaller, manageable logical steps. It requires patience, precision, and a continuous willingness to learn and adapt to new paradigms.",
+            "The quick brown fox jumps over the lazy dog. This classic pangram contains every letter of the English alphabet, making it incredibly useful for testing typewriters, computer keyboards, and fonts.",
+            "Reading books expands the mind, offering new perspectives and cultivating empathy. Whether it is fiction that transports us to magical realms or non-fiction that educates, literature remains a cornerstone of human culture.",
+            "Climate change poses a significant threat to global ecosystems. Sustainable practices, renewable energy adoption, and collective awareness are essential to mitigate its impacts and secure a healthy planet for future generations.",
+            "In the realm of software development, writing clean and maintainable code is just as crucial as ensuring functionality. Well-documented codebases allow teams to collaborate effectively and scale applications seamlessly."
+        ];
+
+        // ==========================================
+        // 4. TYPING TEST LOGIC & DOM ELEMENTS
+        // ==========================================
+        const timeSelect = document.getElementById('timeSelect');
+        const countdownTimer = document.getElementById('countdownTimer');
+        const textDisplay = document.getElementById('sampleTextDisplay');
+        const inputArea = document.getElementById('typingInput');
+        const submitBtn = document.getElementById('submitBtn');
+        const resetBtn = document.getElementById('resetBtn');
+
+        // Stats Displays
+        const wpmDisplay = document.getElementById('wpmDisplay');
+        const wpsDisplay = document.getElementById('wpsDisplay');
+        const correctWordsDisplay = document.getElementById('correctWordsDisplay');
+        const wrongWordsDisplay = document.getElementById('wrongWordsDisplay');
+
+        // State Variables
+        let currentTargetText = "";
+        let timeLimit = parseInt(timeSelect.value); 
+        let timeLeft = timeLimit;
+        let testRunning = false;
+        let timerInterval = null;
+        let startTime = null;
+
+        // --- Initialization ---
+        function generateTextForDuration(seconds) {
+            // Rough estimate: average typist types ~5 characters per second
+            // 30s -> ~150 chars, 60s -> ~300 chars, etc.
+            let requiredLength = seconds * 6; // slightly over-provisioning
+            let generatedText = "";
+            
+            // Randomly pick paragraphs until we reach required length
+            while (generatedText.length < requiredLength) {
+                const randomPara = paragraphBank[Math.floor(Math.random() * paragraphBank.length)];
+                generatedText += (generatedText === "" ? "" : " ") + randomPara;
+            }
+            return generatedText;
+        }
+
+        function formatTime(seconds) {
+            const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+            const s = (seconds % 60).toString().padStart(2, '0');
+            return `${m}:${s}`;
+        }
+
+        function initTest() {
+            // Stop previous test if any
+            testRunning = false;
+            clearInterval(timerInterval);
+            
+            // Reset state
+            timeLimit = parseInt(timeSelect.value);
+            timeLeft = timeLimit;
+            countdownTimer.innerText = formatTime(timeLeft);
+            
+            inputArea.value = '';
+            inputArea.disabled = false;
+            submitBtn.classList.add('hidden'); // Hide submit until typing starts
+            
+            // Reset Stats UI
+            wpmDisplay.innerText = '0';
+            wpsDisplay.innerText = '0.00';
+            correctWordsDisplay.innerText = '0';
+            wrongWordsDisplay.innerText = '0';
+            
+            // Generate and render text
+            currentTargetText = generateTextForDuration(timeLimit);
+            renderReferenceText(currentTargetText);
+            
+            inputArea.focus();
+        }
+
+        // Convert the string into individual spans for character-by-character colorization
+        function renderReferenceText(text) {
+            textDisplay.innerHTML = ''; // clear
+            text.split('').forEach(char => {
+                const span = document.createElement('span');
+                span.innerText = char;
+                textDisplay.appendChild(span);
+            });
+        }
+
+        // --- Event Listeners ---
+        timeSelect.addEventListener('change', initTest);
+        resetBtn.addEventListener('click', initTest);
+        submitBtn.addEventListener('click', () => {
+            if (testRunning) endTest();
+        });
+
+        // The core real-time analysis logic on every keystroke
+        inputArea.addEventListener('input', () => {
+            const typedText = inputArea.value;
+
+            // Start timer on first keystroke
+            if (!testRunning && typedText.length > 0) {
+                startTest();
+            }
+
+            const chars = typedText.split('');
+            const spans = textDisplay.querySelectorAll('span');
+            
+            // Auto-scroll mechanism to keep the current line in view
+            let lastActiveSpan = null;
+
+            // Loop through all spans to apply correct/wrong styles
+            spans.forEach((span, index) => {
+                // Reset classes first
+                span.className = ''; 
+
+                if (index < chars.length) {
+                    if (chars[index] === span.innerText) {
+                        // Correct character typed
+                        span.className = 'text-green-700 bg-green-100 rounded-sm font-bold shadow-sm transition-colors';
+                    } else {
+                        // Wrong character typed
+                        span.className = 'text-red-700 bg-red-200 rounded-sm font-bold shadow-sm transition-colors underline decoration-red-500';
+                    }
+                    lastActiveSpan = span;
+                } else if (index === chars.length) {
+                    // Current cursor position
+                    span.className = 'bg-indigo-200 animate-pulse rounded-sm border-b-2 border-indigo-600';
+                    lastActiveSpan = span;
+                }
+            });
+
+            // Auto-scroll the container
+            if (lastActiveSpan) {
+                const containerTop = textDisplay.scrollTop;
+                const containerBottom = containerTop + textDisplay.clientHeight;
+                const spanTop = lastActiveSpan.offsetTop - textDisplay.offsetTop;
+                const spanBottom = spanTop + lastActiveSpan.clientHeight;
+
+                if (spanBottom > containerBottom - 20) {
+                    textDisplay.scrollTop += 30; // Scroll down
+                } else if (spanTop < containerTop) {
+                    textDisplay.scrollTop -= 30; // Scroll up
+                }
+            }
+
+            // Stop test automatically if they reach the exact end of the text
+            if (typedText.length >= currentTargetText.length) {
+                endTest();
+            }
+        });
+
+        // --- Core Test Functions ---
+        function startTest() {
+            testRunning = true;
+            startTime = Date.now();
+            submitBtn.classList.remove('hidden'); // Allow user to submit early
+            
+            timerInterval = setInterval(() => {
+                timeLeft--;
+                countdownTimer.innerText = formatTime(timeLeft);
+                
+                if (timeLeft <= 0) {
+                    endTest();
+                }
+            }, 1000);
+        }
+
+        async function endTest() {
+            testRunning = false;
+            clearInterval(timerInterval);
+            inputArea.disabled = true; // Lock input
+            submitBtn.classList.add('hidden');
+            
+            // Calculate final time elapsed (in seconds)
+            const timeElapsedSec = (Date.now() - startTime) / 1000;
+            const timeElapsedMin = timeElapsedSec / 60;
+
+            const typedText = inputArea.value;
+            
+            // Calculate words based on characters for standard WPM formula
+            // Standard definition: 5 characters = 1 Word
+            let totalCorrectChars = 0;
+            for (let i = 0; i < typedText.length; i++) {
+                if (typedText[i] === currentTargetText[i]) {
+                    totalCorrectChars++;
+                }
+            }
+            
+            const wordsEquivalent = totalCorrectChars / 5;
+            
+            // Calculate WPM and WPS
+            const wpm = timeElapsedMin > 0 ? Math.round(wordsEquivalent / timeElapsedMin) : 0;
+            const wps = timeElapsedSec > 0 ? (wordsEquivalent / timeElapsedSec).toFixed(2) : 0;
+
+            // Calculate Word Accuracy (Splitting by space for literal word count)
+            const typedWordsArray = typedText.trim().split(/\s+/);
+            const targetWordsArray = currentTargetText.trim().split(/\s+/);
+            
+            let correctWordsCount = 0;
+            let wrongWordsCount = 0;
+
+            for (let i = 0; i < typedWordsArray.length; i++) {
+                // To avoid empty strings counting as words
+                if (typedWordsArray[i] === "") continue; 
+
+                if (typedWordsArray[i] === targetWordsArray[i]) {
+                    correctWordsCount++;
+                } else {
+                    wrongWordsCount++;
+                }
+            }
+
+            // Update DOM with results
+            wpmDisplay.innerText = wpm;
+            wpsDisplay.innerText = wps;
+            correctWordsDisplay.innerText = correctWordsCount;
+            wrongWordsDisplay.innerText = wrongWordsCount;
+            countdownTimer.innerText = "DONE!";
+
+            // Save results to the cloud
+            await saveResultToFirebase(wpm, parseFloat(wps), correctWordsCount, wrongWordsCount, timeLimit);
+        }
+
+        // ==========================================
+        // 5. DATABASE SAVE & CHART LOAD FUNCTIONS
+        // ==========================================
+        
+        async function saveResultToFirebase(wpm, wps, correctWords, wrongWords, duration) {
+            const resultData = {
+                wpm: wpm,
+                wps: wps,
+                correctWords: correctWords,
+                wrongWords: wrongWords,
+                durationSeconds: duration,
+                timestamp: Date.now() 
+            };
+
+            // Always save locally so the graph updates immediately even in offline mode
+            localHistory.push(resultData);
+
+            if (!userId || !db) {
+                // Offline mode update
+                await loadHistoryAndRenderChart();
+                return; 
+            }
+            
+            try {
+                // Using strict path rules to avoid permission errors
+                const historyCollection = collection(db, 'artifacts', appId, 'users', userId, 'typing_history');
+                await addDoc(historyCollection, resultData);
+                await loadHistoryAndRenderChart();
+            } catch (error) {
+                console.error("Error saving data to Firebase:", error);
+                // Still update chart with local data if Firebase fails
+                await loadHistoryAndRenderChart();
+            }
+        }
+
+        async function loadHistoryAndRenderChart() {
+            let historyData = [...localHistory]; // Start with local session data
+
+            if (userId && db) {
+                try {
+                    const historyCollection = collection(db, 'artifacts', appId, 'users', userId, 'typing_history');
+                    const snapshot = await getDocs(historyCollection);
+                    
+                    let cloudData = [];
+                    snapshot.forEach(doc => {
+                        cloudData.push(doc.data());
+                    });
+
+                    // Merge local and cloud data, removing duplicates based on timestamp
+                    const mergedData = [...cloudData, ...localHistory];
+                    const uniqueData = Array.from(new Map(mergedData.map(item => [item.timestamp, item])).values());
+                    historyData = uniqueData;
+
+                } catch (error) {
+                    console.error("Error fetching graph data from Cloud:", error);
+                }
+            }
+
+            // Chronological sort
+            historyData.sort((a, b) => a.timestamp - b.timestamp);
+
+            const labels = [];
+            const wpmDataPoints = [];
+
+            if (historyData.length === 0) {
+                // Default empty state for the graph
+                labels.push('No attempts yet');
+                wpmDataPoints.push(0);
+            } else {
+                historyData.forEach((entry, index) => {
+                    labels.push(`Attempt ${index + 1}`);
+                    wpmDataPoints.push(entry.wpm);
+                });
+            }
+
+            updateChart(labels, wpmDataPoints);
+        }
+
+        // ==========================================
+        // 6. CHART.JS GRAPH ANALYSIS LOGIC
+        // ==========================================
+        let typingChart = null; 
+
+        function updateChart(labels, data) {
+            const ctx = document.getElementById('progressChart').getContext('2d');
+            
+            if (typingChart) typingChart.destroy(); // Clear previous instance
+
+            typingChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels, 
+                    datasets: [{
+                        label: 'Net WPM Over Time',
+                        data: data, 
+                        borderColor: '#4f46e5', // Tailwind indigo-600
+                        backgroundColor: 'rgba(79, 70, 229, 0.1)',
+                        borderWidth: 3,
+                        pointBackgroundColor: '#4f46e5',
+                        pointHoverBackgroundColor: '#c026d3', // Fuchsia hover
+                        pointRadius: 5,
+                        fill: true,
+                        tension: 0.4 // Smooth curves
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: { display: true, text: 'Words Per Minute' },
+                            grid: { color: '#f1f5f9' }
+                        },
+                        x: {
+                            title: { display: true, text: 'Test History' },
+                            grid: { display: false }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: true, position: 'top' },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return ` WPM: ${context.parsed.y}`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // ==========================================
+        // 7. INITIALIZATION KICKOFF
+        // ==========================================
+        // Run setup
+        initTest(); 
+        setupFirebase();
+
+    </script>
+</body>
+</html>
